@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+
+{% block title %}Host Dashboard{% endblock %}
+
+{% block content %}
+    <h2>Host Dashboard</h2>
+    
+    <div class="room-code-display">
+        Room Code: <span id="roomCodeText" style="color: var(--primary-color);">{{ code }}</span>
+    </div>
+    
+    <div id="buzzesContainer" style="display: none; background: rgba(0,0,0,0.3); padding: 20px; border-radius: 16px; margin-bottom: 30px;">
+        <h3>Buzzes</h3>
+        <ol id="buzzList" style="text-align: left; font-size: 1.2rem; margin-left: 20px;">
+        </ol>
+    </div>
+    
+    <div style="display: flex; gap: 10px; margin-bottom: 30px;">
+        <button id="activateBuzzerBtn" class="btn-success">Activate Buzzer</button>
+        <button id="resetBuzzerBtn" class="btn-danger">Reset Buzzer</button>
+    </div>
+
+    <h3>Teams</h3>
+    
+    <div class="input-group" style="flex-direction: row;">
+        <input type="text" id="teamNameInput" placeholder="Enter Team Name">
+        <button id="addTeamBtn" class="btn-primary" style="width: 150px;">Add Team</button>
+    </div>
+    
+    <ul id="teamList" class="team-list">
+        <!-- Teams will be populated here -->
+    </ul>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const socket = io();
+    const roomCode = '{{ code }}';
+    
+    // Join as host
+    socket.emit('join_host', { code: roomCode });
+    
+    // DOM Elements
+    const addTeamBtn = document.getElementById('addTeamBtn');
+    const teamNameInput = document.getElementById('teamNameInput');
+    const teamList = document.getElementById('teamList');
+    const activateBuzzerBtn = document.getElementById('activateBuzzerBtn');
+    const resetBuzzerBtn = document.getElementById('resetBuzzerBtn');
+    const buzzesContainer = document.getElementById('buzzesContainer');
+    const buzzList = document.getElementById('buzzList');
+    
+    addTeamBtn.addEventListener('click', () => {
+        const teamName = teamNameInput.value.trim();
+        if (teamName) {
+            socket.emit('add_team', { code: roomCode, team_name: teamName });
+            teamNameInput.value = '';
+        }
+    });
+    
+    activateBuzzerBtn.addEventListener('click', () => {
+        socket.emit('activate_buzzer', { code: roomCode });
+    });
+    
+    resetBuzzerBtn.addEventListener('click', () => {
+        socket.emit('reset_buzzer', { code: roomCode });
+    });
+    
+    socket.on('update_teams', (data) => {
+        teamList.innerHTML = '';
+        data.teams.forEach(team => {
+            const li = document.createElement('li');
+            const teamLink = `${window.location.origin}/team/${roomCode}/${team.id}`;
+            li.innerHTML = `
+                <div>
+                    <strong>${team.name}</strong> 
+                    <span class="link-copy" onclick="copyToClipboard('${teamLink}')">(Copy Join Link)</span>
+                </div>
+                <span class="status-badge ${team.joined ? 'status-joined' : 'status-waiting'}">
+                    ${team.joined ? 'Joined' : 'Waiting...'}
+                </span>
+            `;
+            teamList.appendChild(li);
+        });
+    });
+    
+    socket.on('buzzer_state', (data) => {
+        // Handle buzzes list
+        if (data.buzzes && data.buzzes.length > 0) {
+            buzzesContainer.style.display = 'block';
+            buzzList.innerHTML = '';
+            data.buzzes.forEach((buzz, index) => {
+                const li = document.createElement('li');
+                li.style.padding = '5px 0';
+                li.style.fontWeight = index === 0 ? '800' : 'normal';
+                li.style.color = index === 0 ? 'var(--warning-color)' : 'white';
+                li.innerText = `${buzz.team_name}`;
+                buzzList.appendChild(li);
+            });
+        } else {
+            buzzesContainer.style.display = 'none';
+            buzzList.innerHTML = '';
+        }
+
+        // Handle active state
+        if (data.active) {
+            activateBuzzerBtn.disabled = true;
+            activateBuzzerBtn.style.opacity = 0.5;
+            activateBuzzerBtn.innerText = "Buzzer Active";
+        } else {
+            activateBuzzerBtn.disabled = false;
+            activateBuzzerBtn.style.opacity = 1;
+            activateBuzzerBtn.innerText = "Activate Buzzer";
+        }
+    });
+    
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            alert('Link copied to clipboard!');
+        });
+    }
+</script>
+{% endblock %}

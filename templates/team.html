@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block title %}Team Screen - {{ team_name }}{% endblock %}
+
+{% block content %}
+    <h2>Team: <span style="color: var(--primary-color);">{{ team_name }}</span></h2>
+    <p id="statusText">Waiting for host to activate buzzer...</p>
+    
+    <div class="buzzer-container">
+        <button id="buzzBtn" class="buzzer inactive" disabled>BUZZ</button>
+    </div>
+    
+    <div id="rankDisplay" style="display: none; margin-top: 20px; font-size: 1.2rem; text-align: center;">
+        Your Buzzes: <span id="buzzCount">0</span>
+    </div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const socket = io();
+    const roomCode = '{{ code }}';
+    const teamId = '{{ team_id }}';
+    const teamName = '{{ team_name }}';
+    
+    // Join as team
+    socket.emit('join_team', { code: roomCode, team_id: teamId });
+    
+    const buzzBtn = document.getElementById('buzzBtn');
+    const statusText = document.getElementById('statusText');
+    
+    // Handle buzz click (both mouse and touch for mobile)
+    const handleBuzz = (e) => {
+        e.preventDefault(); // Prevent double firing on touch
+        if (!buzzBtn.disabled) {
+            socket.emit('buzz', { code: roomCode, team_id: teamId });
+            // Add a quick feedback animation
+            buzzBtn.style.transform = 'scale(0.9)';
+            setTimeout(() => { buzzBtn.style.transform = 'scale(1)'; }, 100);
+            statusText.innerText = 'Buzzed! Keep going if you want!';
+        }
+    };
+
+    buzzBtn.addEventListener('click', handleBuzz);
+    buzzBtn.addEventListener('touchstart', handleBuzz);
+    
+    socket.on('buzzer_state', (data) => {
+        const rankDisplay = document.getElementById('rankDisplay');
+        const buzzCountSpan = document.getElementById('buzzCount');
+        
+        if (data.buzzes && data.buzzes.length > 0) {
+            const teamBuzzes = data.buzzes.filter(b => b.team_id === teamId);
+            if (teamBuzzes.length > 0) {
+                rankDisplay.style.display = 'block';
+                buzzCountSpan.innerText = teamBuzzes.length;
+                
+                // If they were the very first to buzz
+                if (data.buzzes[0].team_id === teamId) {
+                    statusText.innerText = '🏆 YOU WERE FIRST! 🏆';
+                    statusText.style.color = 'var(--warning-color)';
+                    statusText.style.fontWeight = 'bold';
+                    buzzBtn.className = 'buzzer winner';
+                } else {
+                    statusText.innerText = 'You buzzed! Keep going!';
+                    statusText.style.color = 'var(--text-primary)';
+                    buzzBtn.className = 'buzzer active';
+                }
+            }
+        } else {
+            rankDisplay.style.display = 'none';
+        }
+
+        if (data.active) {
+            buzzBtn.disabled = false;
+            // Only reset classes if they haven't buzzed yet in this round
+            const teamBuzzes = data.buzzes ? data.buzzes.filter(b => b.team_id === teamId) : [];
+            if (teamBuzzes.length === 0) {
+                buzzBtn.className = 'buzzer active';
+                statusText.innerText = '🟢 BUZZER ACTIVE! PRESS NOW! 🟢';
+                statusText.style.color = 'var(--success-color)';
+                statusText.style.fontWeight = 'bold';
+            }
+        } else {
+            buzzBtn.disabled = true;
+            buzzBtn.className = 'buzzer inactive';
+            statusText.innerText = 'Waiting for host to activate buzzer...';
+            statusText.style.color = 'var(--text-secondary)';
+            statusText.style.fontWeight = 'normal';
+        }
+    });
+</script>
+{% endblock %}
